@@ -1,0 +1,136 @@
+name: ui-lib
+
+x-api-build: &api-build
+  context: .
+  target: api
+
+x-api-env: &api-env
+  DATABASE_URL: mysql://root:${MYSQL_ROOT_PASSWORD:-social_app_password}@mysql:3306/${MYSQL_DATABASE:-social_app}
+  JWT_SECRET: ${JWT_SECRET:-change-this-secret-before-production}
+  DB_CONNECTION_LIMIT: ${DB_CONNECTION_LIMIT:-1}
+  DB_CONNECT_TIMEOUT_MS: ${DB_CONNECT_TIMEOUT_MS:-5000}
+  DB_ACQUIRE_TIMEOUT_MS: ${DB_ACQUIRE_TIMEOUT_MS:-5000}
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-social_app_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-social_app}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -h 127.0.0.1 -P 3306 -uroot -p$${MYSQL_ROOT_PASSWORD} -e 'SELECT 1' --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build: *api-build
+    image: ${DOCKER_REPOSITORY:-myngaa/myngaaa}:api-${IMAGE_TAG:-latest}
+    environment:
+      <<: *api-env
+    command: ["npx", "prisma", "migrate", "deploy"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  user-service:
+    build: *api-build
+    image: ${DOCKER_REPOSITORY:-myngaa/myngaaa}:api-${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+      USER_SERVICE_PORT: 3001
+    command: ["node", "src/services/user-server.js"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  vlog-service:
+    build: *api-build
+    image: ${DOCKER_REPOSITORY:-myngaa/myngaaa}:api-${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+      VLOG_SERVICE_PORT: 3002
+    command: ["node", "src/services/vlog-server.js"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  task-service:
+    build: *api-build
+    image: ${DOCKER_REPOSITORY:-myngaa/myngaaa}:api-${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+      TASK_SERVICE_PORT: 3004
+    command: ["node", "src/services/task-server.js"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3004/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  gateway:
+    build: *api-build
+    image: ${DOCKER_REPOSITORY:-myngaa/myngaaa}:api-${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-change-this-secret-before-production}
+      GATEWAY_PORT: 3003
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:-http://localhost:5174}
+      USER_SERVICE_URL: http://user-service:3001
+      VLOG_SERVICE_URL: http://vlog-service:3002
+      TASK_SERVICE_URL: http://task-service:3004
+    command: ["node", "src/services/gateway-server.js"]
+    ports:
+      - "3005:3003"
+    depends_on:
+      user-service:
+        condition: service_healthy
+      vlog-service:
+        condition: service_healthy
+      task-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3003/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  client:
+    build:
+      context: .
+      target: client
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3005/api}
+    image: ${DOCKER_REPOSITORY:-myngaa/myngaaa}:client-${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "5174:80"
+    depends_on:
+      gateway:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
+
+  

@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum ReactionType {
+  LIKE
+  DISLIKE
+  LOVE
+  HAHA
+  WOW
+  SAD
+  ANGRY
+}
+
+model User {
+  id           Int            @id @default(autoincrement())
+  name         String
+  email        String         @unique
+  passwordHash String
+  posts        Post[]
+  tasks        Task[]
+  comments     Comment[]
+  reactions    PostReaction[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@map("users")
+}
+
+model Post {
+  id           Int            @id @default(autoincrement())
+  title        String         @default("")
+  body         String         @db.Text
+  mediaUrl     String?
+  thumbnailUrl String?
+  category     String         @default("general")
+  tags         String         @default("")
+  published    Boolean        @default(true)
+  authorId     Int
+  author       User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments     Comment[]
+  reactions    PostReaction[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([authorId])
+  @@index([category])
+  @@map("posts")
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  body      String   @db.Text
+  postId    Int
+  authorId  Int
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([postId])
+  @@index([authorId])
+  @@map("comments")
+}
+
+model PostReaction {
+  id        Int          @id @default(autoincrement())
+  type      ReactionType
+  postId    Int
+  userId    Int
+  post      Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([postId, userId])
+  @@index([userId])
+  @@map("post_reactions")
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Task {
+  id          Int          @id @default(autoincrement())
+  title       String
+  description String?      @db.Text
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  dueDate     DateTime?
+  ownerId     Int
+  owner       User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([ownerId])
+  @@index([status])
+  @@map("tasks")
+}

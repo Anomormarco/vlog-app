@@ -1,0 +1,43 @@
+{
+  "name": "ui-lib",
+  "version": "1.0.0",
+  "description": "API Gateway with user and vlog microservices",
+  "main": "src/services/gateway-server.js",
+  "scripts": {
+    "dev": "nodemon scripts/start-services.js",
+    "dev:client": "vite --host 0.0.0.0",
+    "dev:full": "node scripts/start-services.js",
+    "dev:gateway": "nodemon src/services/gateway-server.js",
+    "dev:user": "nodemon src/services/user-server.js",
+    "dev:vlog": "nodemon src/services/vlog-server.js",
+    "start": "node src/services/gateway-server.js",
+    "start:all": "node scripts/start-services.js",
+    "start:user": "node src/services/user-server.js",
+    "start:vlog": "node src/services/vlog-server.js",
+    "build:client": "vite build",
+    "preview:client": "vite preview --host 0.0.0.0",
+    "db:create": "node scripts/create-database.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "test": "node --test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@prisma/adapter-mariadb": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "@vitejs/plugin-react": "^6.0.2",
+    "express": "^5.2.1",
+    "mariadb": "^3.5.3",
+    "nodemon": "^3.1.14",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "vite": "^8.0.16"
+  },
+  "devDependencies": {
+    "prisma": "^7.8.0"
+  }
+}

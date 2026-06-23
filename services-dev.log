@@ -1,0 +1,3 @@
+API Gateway running on http://localhost:3003
+User service running on http://localhost:3001
+Vlog service running on http://localhost:3002
