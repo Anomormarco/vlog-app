@@ -5,25 +5,23 @@ x-api-build: &api-build
   target: api
 
 x-api-env: &api-env
-  DATABASE_URL: mysql://root:${MYSQL_ROOT_PASSWORD:-social_app_password}@mysql:3306/${MYSQL_DATABASE:-social_app}
+  DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-pass}@postgres:5432/${POSTGRES_DB:-social_app}
   JWT_SECRET: ${JWT_SECRET:-change-this-secret-before-production}
-  DB_CONNECTION_LIMIT: ${DB_CONNECTION_LIMIT:-1}
-  DB_CONNECT_TIMEOUT_MS: ${DB_CONNECT_TIMEOUT_MS:-5000}
-  DB_ACQUIRE_TIMEOUT_MS: ${DB_ACQUIRE_TIMEOUT_MS:-5000}
 
 services:
-  mysql:
-    image: mysql:8.4
+  postgres:
+    image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-social_app_password}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-social_app}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pass}
+      POSTGRES_DB: ${POSTGRES_DB:-social_app}
     ports:
-      - "3307:3306"
+      - "5432:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "mysql -h 127.0.0.1 -P 3306 -uroot -p$${MYSQL_ROOT_PASSWORD} -e 'SELECT 1' --silent"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -35,7 +33,7 @@ services:
       <<: *api-env
     command: ["npx", "prisma", "migrate", "deploy"]
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
 
   user-service:
@@ -131,6 +129,6 @@ services:
         condition: service_healthy
 
 volumes:
-  mysql_data:
+  postgres_data:
 
   
