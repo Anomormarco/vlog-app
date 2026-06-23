@@ -4,7 +4,7 @@
   "description": "API Gateway with user and vlog microservices",
   "main": "src/services/gateway-server.js",
   "scripts": {
-    "dev": "nodemon scripts/start-services.js",
+    "dev": "node scripts/start-services.js",
     "dev:client": "vite --host 0.0.0.0",
     "dev:full": "node scripts/start-services.js",
     "dev:gateway": "nodemon src/services/gateway-server.js",
@@ -41,3 +41,5 @@
     "prisma": "^7.8.0"
   }
 }
+
+
