@@ -110,6 +110,7 @@ function upsertReaction(postId, userId, type) {
     where: { postId_userId: { postId, userId } },
     update: { type },
     create: { postId, userId, type },
+    include: { user: { select: { id: true, name: true } } },
   });
 }
 

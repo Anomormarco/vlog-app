@@ -20,6 +20,7 @@ const services = {
   user: process.env.USER_SERVICE_URL || "http://localhost:3001",
   vlog: process.env.VLOG_SERVICE_URL || "http://localhost:3002",
   task: process.env.TASK_SERVICE_URL || "http://localhost:3004",
+  notification: process.env.NOTIFICATION_SERVICE_URL || "http://localhost:3006",
 };
 
 app.get("/health", (req, res) => {
@@ -54,6 +55,7 @@ app.use("/api/auth", proxyTo(services.user));
 app.use("/api/users", proxyTo(services.user));
 app.use("/api/posts", proxyTo(services.vlog));
 app.use("/api/tasks", proxyTo(services.task));
+app.use("/api/notifications", proxyTo(services.notification));
 
 app.use((error, req, res, next) => {
   console.error(error);

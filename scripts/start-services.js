@@ -3,6 +3,7 @@ const { spawn } = require("child_process");
 const services = [
   ["user-service", "src/services/user-server.js"],
   ["vlog-service", "src/services/vlog-server.js"],
+  ["notification-service", "src/services/notification-server.js"],
   ["api-gateway", "src/services/gateway-server.js"],
 ];
 

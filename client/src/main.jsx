@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
@@ -27,8 +27,6 @@ function App() {
   const [notifications, setNotifications] = useState([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [highlightedCommentId, setHighlightedCommentId] = useState(null);
-  const knownCommentIdsRef = useRef(new Set());
-  const commentNotificationsReadyRef = useRef(false);
 
   const unreadCount = notifications.filter((notification) => !notification.read).length;
 
@@ -39,10 +37,6 @@ function App() {
     }),
     [token]
   );
-
-  function notificationStorageKey(activeUser = user) {
-    return activeUser ? `notifications:${activeUser.id}` : "notifications";
-  }
 
   async function request(path, options = {}) {
     const response = await fetch(`${API_URL}${path}`, options);
@@ -56,89 +50,42 @@ function App() {
     return data;
   }
 
-  function saveNotifications(nextNotifications) {
-    if (typeof nextNotifications === "function") {
-      setNotifications((currentNotifications) => {
-        const resolvedNotifications = nextNotifications(currentNotifications);
-        localStorage.setItem(notificationStorageKey(), JSON.stringify(resolvedNotifications));
-        return resolvedNotifications;
-      });
-      return;
-    }
-
-    setNotifications(nextNotifications);
-    localStorage.setItem(notificationStorageKey(), JSON.stringify(nextNotifications));
-  }
-
-  function addNotification({ title, body }) {
-    saveNotifications((currentNotifications) => [
-      {
-        id: Date.now(),
-        title,
-        body,
-        read: false,
-        createdAt: new Date().toISOString(),
-      },
-      ...currentNotifications,
-    ]);
-  }
-
-  function syncCommentNotifications(nextPosts, activeUser = user, shouldNotify = false) {
-    if (!activeUser) return;
-
-    const nextCommentIds = new Set();
-    const newNotifications = [];
-
-    nextPosts.forEach((post) => {
-      (post.comments || []).forEach((comment) => {
-        nextCommentIds.add(comment.id);
-
-        const isNewComment = !knownCommentIdsRef.current.has(comment.id);
-        const isOwnPost = post.authorId === activeUser.id;
-        const isFromAnotherUser = comment.authorId !== activeUser.id;
-
-        if (
-          shouldNotify &&
-          commentNotificationsReadyRef.current &&
-          isNewComment &&
-          isOwnPost &&
-          isFromAnotherUser
-        ) {
-          newNotifications.push({
-            title: "New comment",
-            body: `${comment.author?.name || "Someone"} commented on "${post.title || "your post"}".`,
-            postId: post.id,
-            commentId: comment.id,
-          });
-        }
-      });
+  async function loadNotifications(activeToken = token) {
+    if (!activeToken) return;
+    const data = await request("/notifications", {
+      headers: { Authorization: `Bearer ${activeToken}` },
     });
-
-    knownCommentIdsRef.current = nextCommentIds;
-    commentNotificationsReadyRef.current = true;
-    newNotifications.forEach(addNotification);
+    setNotifications(data.notifications);
   }
 
-  function openNotifications() {
-    const nextNotifications = notifications.map((notification) => ({
-      ...notification,
-      read: true,
-    }));
-    saveNotifications(nextNotifications);
+  async function openNotifications() {
+    if (!notificationsOpen && unreadCount > 0) {
+      const data = await request("/notifications/read-all", {
+        method: "PATCH",
+        headers: authHeaders,
+      });
+      setNotifications(data.notifications);
+    }
     setNotificationsOpen((isOpen) => !isOpen);
   }
 
-  function clearNotifications() {
-    saveNotifications([]);
+  async function clearNotifications() {
+    await request("/notifications", {
+      method: "DELETE",
+      headers: authHeaders,
+    });
+    setNotifications([]);
     setNotificationsOpen(false);
   }
 
-  function openNotification(notification) {
-    saveNotifications((currentNotifications) =>
-      currentNotifications.map((item) =>
-        item.id === notification.id ? { ...item, read: true } : item
-      )
-    );
+  async function openNotification(notification) {
+    if (!notification.read) {
+      const data = await request(`/notifications/${notification.id}/read`, {
+        method: "PATCH",
+        headers: authHeaders,
+      });
+      setNotifications(data.notifications);
+    }
     setNotificationsOpen(false);
 
     if (!notification.commentId) return;
@@ -169,7 +116,6 @@ function App() {
     const data = await request(`/posts?${query.toString()}`, {
       headers: { Authorization: `Bearer ${activeToken}` },
     });
-    syncCommentNotifications(data.posts, options.activeUser || user, options.notify === true);
     setPosts(data.posts);
   }
 
@@ -181,18 +127,14 @@ function App() {
   useEffect(() => {
     if (!token) return;
     loadMe(token)
-      .then(() => loadPosts(token))
+      .then(() => Promise.all([loadPosts(token), loadNotifications(token)]))
       .catch(() => logout());
   }, []);
 
   useEffect(() => {
     if (!user) {
       setNotifications([]);
-      return;
     }
-
-    const saved = localStorage.getItem(notificationStorageKey(user));
-    setNotifications(saved ? JSON.parse(saved) : []);
   }, [user]);
 
   useEffect(() => {
@@ -200,6 +142,7 @@ function App() {
 
     const intervalId = window.setInterval(() => {
       loadPosts(token, { activeUser: user, notify: true }).catch((error) => setMessage(error.message));
+      loadNotifications(token).catch((error) => setMessage(error.message));
     }, 5000);
 
     return () => window.clearInterval(intervalId);
@@ -234,7 +177,10 @@ function App() {
       setUser(data.user);
       setAuthForm({ name: "", email: "", password: "" });
       setMessage("Signed in");
-      await loadPosts(data.token, { activeUser: data.user });
+      await Promise.all([
+        loadPosts(data.token, { activeUser: data.user }),
+        loadNotifications(data.token),
+      ]);
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -248,7 +194,7 @@ function App() {
     setMessage("");
 
     try {
-      const data = await request("/posts", {
+      await request("/posts", {
         method: "POST",
         headers: authHeaders,
         body: JSON.stringify({
@@ -261,10 +207,6 @@ function App() {
       });
       setVlogForm(emptyVlogForm);
       await loadPosts();
-      addNotification({
-        title: "New post",
-        body: `${data.post.author?.name || user.name} posted "${data.post.title}".`,
-      });
       setMessage("Vlog posted");
     } catch (error) {
       setMessage(error.message);

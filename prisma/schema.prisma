@@ -25,6 +25,7 @@ model User {
   tasks        Task[]
   comments     Comment[]
   reactions    PostReaction[]
+  notifications Notification[]
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
@@ -109,4 +110,23 @@ model Task {
   @@index([ownerId])
   @@index([status])
   @@map("tasks")
+}
+
+model Notification {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String
+  title       String
+  body        String   @db.Text
+  read        Boolean  @default(false)
+  postId      Int?
+  commentId   Int?
+  actorId     Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, read])
+  @@index([createdAt])
+  @@map("social_notifications")
 }

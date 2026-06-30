@@ -60,10 +60,18 @@ services:
     environment:
       <<: *api-env
       VLOG_SERVICE_PORT: 3002
+      RABBITMQ_URL: http://rabbitmq:15672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      NOTIFICATION_QUEUE: notifications.events
+      NOTIFICATION_SERVICE_URL: http://notification-service:3006
+      NOTIFICATION_INTERNAL_SECRET: ${NOTIFICATION_INTERNAL_SECRET:-dev-notification-secret}
     command: ["node", "src/services/vlog-server.js"]
     depends_on:
       migrate:
         condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 10s
@@ -87,6 +95,42 @@ services:
       timeout: 5s
       retries: 10
 
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  notification-service:
+    build: *api-build
+    image: ${DOCKER_REPOSITORY:-myngaa/myngaaa}:api-${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+      NOTIFICATION_SERVICE_PORT: 3006
+      RABBITMQ_URL: http://rabbitmq:15672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      NOTIFICATION_QUEUE: notifications.events
+      NOTIFICATION_INTERNAL_SECRET: ${NOTIFICATION_INTERNAL_SECRET:-dev-notification-secret}
+    command: ["node", "src/services/notification-server.js"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3006/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   gateway:
     build: *api-build
     image: ${DOCKER_REPOSITORY:-myngaa/myngaaa}:api-${IMAGE_TAG:-latest}
@@ -98,6 +142,7 @@ services:
       USER_SERVICE_URL: http://user-service:3001
       VLOG_SERVICE_URL: http://vlog-service:3002
       TASK_SERVICE_URL: http://task-service:3004
+      NOTIFICATION_SERVICE_URL: http://notification-service:3006
     command: ["node", "src/services/gateway-server.js"]
     ports:
       - "3005:3003"
@@ -107,6 +152,8 @@ services:
       vlog-service:
         condition: service_healthy
       task-service:
+        condition: service_healthy
+      notification-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3003/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]

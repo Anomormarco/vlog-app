@@ -1,4 +1,5 @@
 const { HttpError } = require("../../shared/utils/http-error");
+const { publishNotificationEvent } = require("../../shared/mq/rabbitmq-http");
 const postRepository = require("./post.repository");
 
 const allowedReactions = new Set(["LIKE", "DISLIKE", "LOVE", "HAHA", "WOW", "SAD", "ANGRY"]);
@@ -134,8 +135,25 @@ async function createComment(postId, userId, { body }) {
     throw new HttpError(400, "body is required");
   }
 
-  await getPost(postId);
-  return postRepository.createComment(Number(postId), userId, body.trim());
+  const post = await getPost(postId);
+  const comment = await postRepository.createComment(Number(postId), userId, body.trim());
+
+  if (post.authorId !== userId) {
+    publishNotificationEvent({
+      type: "comment.created",
+      postId: post.id,
+      postTitle: post.title,
+      postAuthorId: post.authorId,
+      commentId: comment.id,
+      commentAuthorId: comment.authorId,
+      commentAuthorName: comment.author?.name,
+      createdAt: comment.createdAt,
+    }).catch((error) => {
+      console.error("Could not publish notification event:", error.message);
+    });
+  }
+
+  return comment;
 }
 
 async function getOwnedComment(postId, commentId, userId) {
@@ -175,8 +193,24 @@ async function reactToPost(postId, userId, { type }) {
     throw new HttpError(400, "bad request");
   }
 
-  await getPost(postId);
-  await postRepository.upsertReaction(Number(postId), userId, type);
+  const post = await getPost(postId);
+  const reaction = await postRepository.upsertReaction(Number(postId), userId, type);
+
+  if (post.authorId !== userId) {
+    publishNotificationEvent({
+      type: "reaction.created",
+      reactionType: reaction.type,
+      postId: post.id,
+      postTitle: post.title,
+      postAuthorId: post.authorId,
+      actorId: reaction.userId,
+      actorName: reaction.user?.name,
+      createdAt: reaction.createdAt,
+    }).catch((error) => {
+      console.error("Could not publish notification event:", error.message);
+    });
+  }
+
   return getPost(postId);
 }
 
